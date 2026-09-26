@@ -1,4 +1,6 @@
 #pytest tests/test_comments.py -v
+
+#to test all tests pytest tests/ -v
 from fastapi.testclient import TestClient
 from app.main import app
 from app.dependencies import get_store

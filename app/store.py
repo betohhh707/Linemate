@@ -6,8 +6,11 @@ create_comment — verified the foreign-key existence check (a real "prevent sil
  edge case you can point to directly in your presentation), plus the URL-path ticket_id pattern
 """
 from app.models.document import Document, DocumentCreate
-from app.models.ticket import Ticket, TicketCreate
+from app.models.ticket import Ticket, TicketCreate, TicketStatus
 from app.models.comment import Comment, CommentCreate
+from app.models.crewmember import CrewMember, Station
+import pandas as pd 
+
 class DataStore:
     def __init__(self):
         self.documents: dict[int, Document] = {}
@@ -16,7 +19,14 @@ class DataStore:
         self._document_counter: int = 1
         self._comment_counter: int = 1
         self._ticket_counter: int = 1
-   
+        self.crew_members: dict[int, CrewMember] = {
+            1: CrewMember(id=1, name="Alice Chen", station=Station.GRILL),
+            2: CrewMember(id=2, name="Marcus Webb", station=Station.GRILL),
+            3: CrewMember(id=3, name="Priya Nair", station=Station.PASTRY),
+            4: CrewMember(id=4, name="Diego Ramirez", station=Station.PREP),
+            5: CrewMember(id=5, name="Sam Okafor", station=Station.PREP),
+            6: CrewMember(id=6, name="Jordan Lee", station=Station.FRONT_OF_HOUSE),
+        }
     #combine documentCreate with 
     #store assigned fields to build
     # and save a full document 
@@ -63,3 +73,20 @@ class DataStore:
 
     def list_comments(self)-> list[Comment]:
         return list(self.comments.values())
+
+    def get_workload_distribution(self):
+        results = []
+        for ticket in self.tickets.values():
+            if ticket.status in (TicketStatus.RESOLVED, TicketStatus.CLOSED):
+                continue
+            crew_member = self.crew_members.get(ticket.assignee_id)
+            results.append({"priority": ticket.priority.value, "station": crew_member.station.value})
+        if not results:
+            return {}
+        
+        df = pd.DataFrame(results)
+        counts = df.groupby(["station", "priority"]).size()
+        df_reset = counts.reset_index(name="count")
+        records = df_reset.to_dict(orient="records")
+
+        return records 
