@@ -5,3 +5,8 @@ pytest
 httpx
 pandas
 numpy
+langchain
+langchain-ollama
+langchain-chroma
+langchain-text-splitters
+chromadb

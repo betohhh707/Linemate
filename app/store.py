@@ -17,6 +17,7 @@ class DataStore:
         self.documents: dict[int, Document] = {}
         self.comments: dict [int, Comment] = {}
         self.tickets: dict[int, Ticket] = {}
+        self.conversations: dict[str, list[dict]] = {}
         self._document_counter: int = 1
         self._comment_counter: int = 1
         self._ticket_counter: int = 1
@@ -133,3 +134,9 @@ class DataStore:
                     "last_reviewed_at": document.last_reviewed_at,
                 })
         return results
+
+    def add_conversation_turn(self, conversation_id: str, question: str, answer: str) -> None:
+        self.conversations.setdefault(conversation_id, []).append({"question": question, "answer": answer})
+
+    def get_conversation_history(self, conversation_id: str, limit: int = 3) -> list[dict]:
+        return self.conversations.get(conversation_id, [])[-limit:]
