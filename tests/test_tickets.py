@@ -12,11 +12,11 @@ app.dependency_overrides[get_store] = get_test_store
 client = TestClient(app)
 
 def test_create_ticket():
-    response = client.post("/tickets", json = {"title": "Can opener needs fixin", "priority": "High", "assignee_id" : 7, "related_document_id" : 1})
+    response = client.post("/tickets", json={"title": "Can opener needs fixin", "priority": "High", "assignee_id": 5})
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Can opener needs fixin"
-    assert "id" in data 
+    assert "id" in data
 
 def test_get_ticket_not_found():
     response = client.get("/tickets/999")
@@ -29,5 +29,14 @@ def test_list_tickets():
     assert isinstance(data, list)
 
 def test_create_ticket_invalid_priority():
-    response = client.post("/tickets", json = {"title": "Can opener needs fixin", "priority": "Urgente", "assignee_id" : 7, "related_document_id" : 1})
+    response = client.post("/tickets", json={"title": "Can opener needs fixin", "priority": "Urgente", "assignee_id": 5})
     assert response.status_code == 422
+
+def test_create_ticket_invalid_assignee():
+    response = client.post("/tickets", json={"title": "Broken thing", "priority": "Low", "assignee_id": 9999})
+    assert response.status_code == 404
+
+def test_create_ticket_invalid_related_document():
+    response = client.post("/tickets", json={"title": "Broken thing", "priority": "Low", "assignee_id": 5, "related_document_id": 9999})
+    assert response.status_code == 404
+

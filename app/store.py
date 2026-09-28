@@ -5,10 +5,11 @@ create_ticket — verified default status, optional related_document_id, id assi
 create_comment — verified the foreign-key existence check (a real "prevent silent failures"
  edge case you can point to directly in your presentation), plus the URL-path ticket_id pattern
 """
-from app.models.document import Document, DocumentCreate
+from app.models.document import Document, DocumentCreate, DocumentCategory
 from app.models.ticket import Ticket, TicketCreate, TicketStatus
 from app.models.comment import Comment, CommentCreate
 from app.models.crewmember import CrewMember, Station
+from datetime import datetime, UTC, timedelta
 import pandas as pd 
 
 class DataStore:
@@ -39,6 +40,10 @@ class DataStore:
         return new_document
 
     def create_ticket(self, data: TicketCreate)-> Ticket:
+        if data.assignee_id not in self.crew_members:
+            raise ValueError(f"No crew member with id {data.assignee_id} exists")
+        if data.related_document_id is not None and data.related_document_id not in self.documents:
+            raise ValueError(f"No document with id {data.related_document_id} exists")       
         new_id = self._ticket_counter
         new_ticket = Ticket(id = new_id, title = data.title, priority = data.priority, assignee_id = data.assignee_id, related_document_id = data.related_document_id)
         self.tickets[new_id] = new_ticket
@@ -80,9 +85,11 @@ class DataStore:
             if ticket.status in (TicketStatus.RESOLVED, TicketStatus.CLOSED):
                 continue
             crew_member = self.crew_members.get(ticket.assignee_id)
+            if crew_member is None:
+                continue
             results.append({"priority": ticket.priority.value, "station": crew_member.station.value})
         if not results:
-            return {}
+            return []
         
         df = pd.DataFrame(results)
         counts = df.groupby(["station", "priority"]).size()
@@ -90,3 +97,39 @@ class DataStore:
         records = df_reset.to_dict(orient="records")
 
         return records 
+    
+    def get_ownership_mismatches(self):
+        results = []
+        for ticket in self.tickets.values():
+            if ticket.related_document_id is None:
+                continue
+            document = self.documents.get(ticket.related_document_id)
+            if document is None:
+                continue
+            assignee_crew_member = self.crew_members.get(ticket.assignee_id)
+            owner_crew_member = self.crew_members.get(document.owner_id)
+            if assignee_crew_member is None or owner_crew_member is None:
+                continue
+            if assignee_crew_member.station != owner_crew_member.station:
+                results.append({
+                    "ticket_id": ticket.id,
+                    "ticket_title": ticket.title,
+                    "assignee_station": assignee_crew_member.station.value,
+                    "document_owner_station": owner_crew_member.station.value,
+                })
+        return results 
+
+    def get_stale_documents(self):
+        results = []
+        now = datetime.now(UTC)
+        ninety_days_ago = now - timedelta(days=90)
+        for document in self.documents.values():
+            if document.category == DocumentCategory.INCIDENT_REPORT:
+                continue
+            if document.last_reviewed_at < ninety_days_ago:
+                results.append({
+                    "document_id": document.id,
+                    "document_title": document.title,
+                    "last_reviewed_at": document.last_reviewed_at,
+                })
+        return results

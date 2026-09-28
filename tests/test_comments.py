@@ -14,7 +14,7 @@ app.dependency_overrides[get_store] = get_test_store
 client = TestClient(app)
 
 def test_create_comment():
-    ticket_response = client.post("/tickets", json = {"title": "...", "priority": "High", "assignee_id" : 7})
+    ticket_response = client.post("/tickets", json = {"title": "...", "priority": "High", "assignee_id" : 1})
     ticket_id = ticket_response.json()["id"]
     
     comment_response = client.post(f"/tickets/{ticket_id}/comments", json={"author_id": 3, "body": "Fixed it"})
