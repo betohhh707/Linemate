@@ -2,9 +2,9 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document as LCDocument
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableLambda
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
 
 from app.store import DataStore
 
@@ -32,8 +32,16 @@ class RagService:
         self.store = store
         self.persist_directory = persist_directory
         self.embeddings = OllamaEmbeddings(model="nomic-embed-text")
-        self.chain = PROMPT | ChatOllama(model="llama3.2", temperature=0) | StrOutputParser()
+        self.answer_chain = PROMPT | ChatOllama(model="llama3.2", temperature=0) | StrOutputParser()
         self.vectorstore = None
+        # A named LCEL step: given a search string, returns only the chunks
+        # that pass MAX_DISTANCE. Built with RunnableLambda so it's a real
+        # composable link, not just an inline Python call.
+        self.retrieval_chain = RunnableLambda(self._retrieve_relevant)
+
+    def _retrieve_relevant(self, search_query: str) -> list[LCDocument]:
+        hits = self.vectorstore.similarity_search_with_score(search_query, k=4)
+        return [doc for doc, score in hits if score <= MAX_DISTANCE]
 
     def index(self) -> int:
         """Chunk every document in the store and embed it into Chroma. Returns chunk count."""
@@ -68,13 +76,13 @@ class RagService:
         history_text = "\n".join(f"Q: {t['question']}\nA: {t['answer']}" for t in history) or "None"
 
         search_query = f"{history_text}\n{question}" if history else question
-        hits = self.vectorstore.similarity_search_with_score(search_query, k=4)
-        relevant = [doc for doc, score in hits if score <= MAX_DISTANCE]
+        relevant = self.retrieval_chain.invoke(search_query)
+
         if not relevant:
             result = {"answer": REFUSAL, "sources": []}
         else:
             context = "\n\n".join(d.page_content for d in relevant)
-            answer = self.chain.invoke({"history": history_text, "context": context, "question": question})
+            answer = self.answer_chain.invoke({"history": history_text, "context": context, "question": question})
             if REFUSAL.lower() in answer.lower():
                 result = {"answer": REFUSAL, "sources": []}
             else:
